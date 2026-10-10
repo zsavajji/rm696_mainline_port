@@ -1,6 +1,6 @@
 # tests/dsp/recovery.sh: DSP crashes and the bridge's recovery on the test kernel (root, from the
 # initramfs shell: build/s.sh sh -s < tests/dsp/recovery.sh), each followed by a normal decode; then
-# the bridge and mailbox messages since the start. The two crashes of boot 158 (README "DSP open
+# the bridge and mailbox messages since the start. The two crashes of boot 158 (NOTES.md "DSP open
 # points closed"), after one of which the mailbox queue to the DSP was full for ~25 s:
 #  - a DSP MMU fault: IOCTL_UNMAP=3 (tests/ioctl-log.c) unmaps a frame buffer right after it's mapped;
 #  - a DSP watchdog (WDT3) overflow: the DSP MMU's table walk switched off mid-decode, only while

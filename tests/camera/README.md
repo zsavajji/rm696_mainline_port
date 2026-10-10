@@ -36,7 +36,7 @@ save to the MyDocs tmpfs, /newroot/tmp is a 4 MB tmpfs):
   (`ispcap 10 0 0 1632 1232`).
 - `ISPCAP_M2M=file`: a raw frame from the file through the CCP2 receiver's memory input, CCDC, preview
   and resizer (`ispcap 1 816 612 1632 1232`), as Harmattan's still processing. One frame per run: a
-  second single-shot frame in one stream never comes on 6.18 (README "Cameras").
+  second single-shot frame in one stream never comes on 6.18 (NOTES.md "Cameras").
 - `ISPCAP_DPCM=1`: the sensor's DPCM8 modes (the 8 Mpixel ones at 15 fps); the CCDC refuses them
   (-ENOSPC, as stock's driver: their line-average pixel rate is above L3/2).
 - `uyvy2ppm.py IN.yuv W H OUT.ppm`: a saved UYVY frame as an image (`sips -s format png` for PNG).

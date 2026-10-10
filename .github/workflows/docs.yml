@@ -5,7 +5,6 @@ name: docs
 on:
   push:
     branches: [master]
-    paths: ['docs/**', 'REMOVED.md', 'FIRMWARE.md', '.github/workflows/docs.yml']
   workflow_dispatch:
 
 permissions:

@@ -12,8 +12,8 @@ recovered. This file is the procedure for when I decide to go ahead.
 
 1. **Calls work with a SIM** ([Audio](docs/audio.md), [Modem](docs/modem.md)): call audio passed SIM-less, but a real
    call is untested. The release waits for it (me, 2026-10-04).
-2. **Video works**: done (README "Video playback", "Video: my clips").
-3. **Cameras work**: done (README "Cameras"); in the release (me, 2026-10-06).
+2. **Video works**: done (NOTES.md "Video playback", "Video: my clips").
+3. **Cameras work**: done (NOTES.md "Cameras"); in the release (me, 2026-10-06).
 4. I have **decided to run Harmattan read-write on the eMMC** (parked today) and to flash. Until
    then the release can't even be built: the whole point is dropping the read-only overlays.
 
@@ -265,7 +265,7 @@ The way back is stock's own signed kernel, which I flash the same way:
   previous good build) and it boots from RAM regardless of what's in the kernel partition. This is the
   primary recovery and needs no cold-flash.
 - **Never RAM-boot stock's *raw* zImage** (the one in `unpacked/`): it hangs after NOLO with no watchdog
-  recovery and needed a battery pull (README). Recovery RAM boots use our image or
+  recovery and needed a battery pull (NOTES.md). Recovery RAM boots use our image or
   stock's properly packaged signed kernel, not the raw zImage.
 - Cold-flash (boot ROM, `0421:0106`) is the last resort if NOLO itself is damaged; flashing only the
   kernel partition should never reach that, since NOLO lives elsewhere. Documented here only so it's

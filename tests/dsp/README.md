@@ -1,6 +1,6 @@
 # DSP (tidspbridge) debugging tools
 
-Made during the bridge bring-up (2026-10-03, boots 89-106); see README "DSP bridge". All phone-side
+Made during the bridge bring-up (2026-10-03, boots 89-106); see NOTES.md "DSP bridge". All phone-side
 scripts run as root on the RAM-booted test kernel unless noted.
 
 - `../gst-test.c` (build/gst-test): runs a GStreamer 0.10 pipeline (Harmattan has no gst-launch),
@@ -19,7 +19,7 @@ scripts run as root on the RAM-booted test kernel unless noted.
   /newroot/syspart/system/tasks, stock's own session is in /system).
 - `dspref.sh`: the reference set, the same on stock and the test kernel (as user): 720p H.264
   Baseline/Main and SD MPEG-4 decodes, and the DSP encoders (720p MPEG-4 as the camera, 720p H.264,
-  JPEG, SD H.264 as video calls) fed by the DSP decoder. Results: README "DSP open points closed".
+  JPEG, SD H.264 as video calls) fed by the DSP decoder. Results: NOTES.md "DSP open points closed".
 - `dsprestart.c` (build/dsprestart N, root, in `chroot /newroot`): stop, reload and start the DSP N
   times through the bridge's ioctls, the steps of its recovery (each start can be checked in the log).
 - `IOCTL_UNMAP=N` with `../ioctl-log.c`: unmaps the Nth mapping of 1 MiB or more right after it's

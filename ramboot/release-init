@@ -1,0 +1,148 @@
+#!/bin/busybox sh
+# The release's ramdisk (kernel/build.sh RELEASE=1): stock Harmattan on the eMMC, read-write, as the
+# stock kernel booted it, plus a rescue SSH server that works even when Harmattan doesn't come up:
+# dropbear on the USB network only (192.168.2.15, port 2222; stock's sshd keeps 22), root, with the
+# phone's own keys (/root/.ssh/authorized_keys, read at each login) and, if /root/.ssh/dropbear-password
+# exists, root's own Harmattan password too (never the factory one). Nothing in the image is a key or a
+# password, and no Harmattan file is changed. The watchdogs are DSME's, as stock.
+/bin/busybox --install -s /bin
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+mount -t proc proc /proc
+mount -t sysfs sys /sys
+mount -t devtmpfs dev /dev
+exec >/dev/kmsg 2>&1
+echo on > /proc/sys/kernel/printk_devkmsg	# every line of this init reaches the log
+
+# UART3, the debug console nothing opens, idles after 3 s as stock's omap-serial did (8250_omap's default
+# keeps it, and with it the CORE domain, on for good)
+echo 3000 > /sys/bus/platform/devices/49020000.serial/power/autosuspend_delay_ms
+
+# Harmattan's root, read-write as stock's kernel mounted it (NOLO: root=/dev/mmcblk0p2 rw
+# rootflags=errors=remount-ro); preinit checks it as on stock. Without it, nothing can start:
+# reboot, as the stock kernel's "unable to mount root" panic did
+mkdir -p /newroot
+i=0
+until [ -b /dev/mmcblk0p2 ] || [ $i = 50 ]; do sleep 0.2; i=$((i + 1)); done
+mount -t ext4 -o rw,errors=remount-ro /dev/mmcblk0p2 /newroot || {
+	echo "rescue: Harmattan's root doesn't mount, rebooting"; sleep 10; reboot -f; }
+
+# This release's state on the phone (root's only): the rescue server's host key, and an opt-in for
+# phones whose power button doesn't work: with poweroff-halt there, a power-off halts instead and the
+# watchdogs can't be stopped, so the phone resets (into stock, on a RAM boot) rather than staying off.
+# (A phone with thp's ACT_DEAD fix comes back from a real power-off when plugged in, without it.)
+v=/newroot/var/lib/n9-618
+mkdir -p $v && chmod 700 $v
+if [ -e $v/poweroff-halt ]; then
+	for f in /sys/class/watchdog/watchdog0/nowayout /sys/class/watchdog/watchdog1/nowayout \
+		/sys/module/twl4030_power/parameters/poweroff_halt; do echo 1 > $f; done
+	echo "rescue: poweroff-halt: power-off halts, watchdogs nowayout"
+fi
+
+# The previous boot's crash records (pstore: its console's last 256 KiB, any oops or panic), kept on the
+# phone as stock kept oopses in NOLO's log partition, then cleared
+mount -t pstore pstore /sys/fs/pstore 2>/dev/null
+if [ -n "$(ls /sys/fs/pstore)" ]; then
+	d=$v/pstore/$(date +%Y%m%d-%H%M%S)
+	mkdir -p $d && cp /sys/fs/pstore/* $d/ && rm -f /sys/fs/pstore/*
+	echo "rescue: the previous boot's pstore records in ${d#/newroot}"
+fi
+
+# The USB network until usb_moded loads its own gadget (SDK mode: g_ether, the same address): a CDC
+# ECM gadget presenting what stock's SDK mode presents (0x0421:0x0519 "Nokia N9 RNDIS/Ethernet", so a
+# computer set up for SDK mode reuses its interface), MACs derived from the eMMC (stable per phone,
+# locally administered). Its interface is rescue0, so usb_moded's gadget always gets usb0
+mount -t configfs configfs /sys/kernel/config
+g=/sys/kernel/config/usb_gadget/rescue
+mkdir $g $g/strings/0x409 $g/functions/ecm.usb0 $g/configs/c.1
+echo "rescue%d" > $g/functions/ecm.usb0/ifname
+echo 0x0421 > $g/idVendor
+echo 0x0519 > $g/idProduct
+echo Nokia > $g/strings/0x409/manufacturer
+echo "Nokia N9 RNDIS/Ethernet" > $g/strings/0x409/product
+m=$(sha256sum /sys/block/mmcblk0/device/cid | sed 's/^\(..\)\(..\)\(..\)\(..\)\(..\).*/\1:\2:\3:\4:\5/')
+echo 06:$m > $g/functions/ecm.usb0/host_addr
+echo 02:$m > $g/functions/ecm.usb0/dev_addr
+ln -s $g/functions/ecm.usb0 $g/configs/c.1/
+i=0
+until [ -n "$(ls /sys/class/udc)" ] || [ $i = 50 ]; do sleep 0.2; i=$((i + 1)); done
+ls /sys/class/udc | head -1 > $g/UDC
+ifconfig rescue0 192.168.2.15 netmask 255.255.255.0 up
+
+# The rescue SSH server. Its host key lives on the phone (made at the first boot); root's password
+# only with the marker file and never while it's still the factory "rootme" (Harmattan keeps root's DES
+# hash in /etc/passwd, no shadow). In the background: without entropy yet dropbear may wait for the
+# kernel's random generator, and Harmattan's boot mustn't
+# The keys through a directory of this ramdisk: dropbear refuses keys under a directory others can
+# write to, all the way up, and Harmattan's / is group-writable (stock's). Bound, so still the phone's
+# own file, read at each login
+mkdir -p /rescue-keys && chmod 700 /rescue-keys
+mount --bind /newroot/root/.ssh /rescue-keys 2>/dev/null || echo "rescue: no /root/.ssh: keys only, none"
+pw=-s
+if [ -e /newroot/root/.ssh/dropbear-password ]; then
+	h=$(grep '^root:' /newroot/etc/passwd | cut -d: -f2)
+	if [ ${#h} != 13 ]; then
+		echo "rescue: root has no DES password in /etc/passwd: keys only"
+	elif [ "$(cryptpw -m des rootme "$(echo "$h" | cut -c1-2)")" = "$h" ]; then
+		echo "rescue: root's password is still the factory one: keys only"
+	else
+		echo "root:$h:0:0:root:/root:/bin/sh" > /etc/passwd
+		pw=
+	fi
+fi
+(
+	[ -s $v/dropbear_ed25519_host_key ] ||
+		dropbearkey -t ed25519 -f $v/dropbear_ed25519_host_key >/dev/null 2>&1
+	# (a debug image, kernel/build.sh RESCUE_ANY=1, listens on every interface: never the release)
+	l=192.168.2.15:2222
+	[ -e /etc/rescue-any ] && l=2222
+	exec dropbear -F -E -r $v/dropbear_ed25519_host_key -p $l -D /rescue-keys $pw
+) &
+
+# usb_moded's gadget (any mode) takes the port: once one is loaded (it waits, registered, for a free
+# UDC), the rescue gadget goes for good, its interface with it (a detached one would linger with the
+# same address), and the gadget bus binds usb_moded's. In SDK mode the address stays 192.168.2.15
+# (dropbear keeps listening on it). Builtins in the wait: a fork is a process event Harmattan's ohmd
+# classifies
+mkfifo /tmp/.tick
+(
+	exec 9<>/tmp/.tick
+	m=
+	while [ -z "$m" ]; do
+		read -t 3 _ <&9
+		while read l _; do
+			case $l in g_ether|g_file_storage|g_nokia) m=$l;; esac
+		done < /proc/modules
+	done
+	echo > $g/UDC
+	rm $g/configs/c.1/ecm.usb0
+	rmdir $g/configs/c.1 $g/functions/ecm.usb0 $g/strings/0x409 $g
+	for d in /sys/bus/gadget/devices/*; do echo -n ${d##*/} > /sys/bus/gadget/drivers_probe; done
+	echo "rescue: USB to usb_moded ($m)"
+	[ $m = g_ether ] || exit 0
+	i=0
+	while [ $i -lt 20 ]; do
+		read -t 1 _ <&9
+		i=$((i + 1))
+		[ -e /sys/class/net/usb0 ] || continue
+		ifconfig usb0 | grep -q "inet addr:192.168.2.15 " ||
+			ifconfig usb0 192.168.2.15 netmask 255.255.255.0 up
+	done
+) &
+
+# This kernel's modules and the firmware of ours that isn't built in, over stock's /lib/modules (the
+# stock kernel never sees it): udev and the jobs load them as stock
+mount --bind /lib/modules /newroot/lib/modules && mount -o remount,bind,ro /newroot/lib/modules
+echo -n /lib/modules/$(uname -r)/firmware > /sys/module/firmware_class/parameters/path
+
+# /dev, /proc and /sys for validator-init, which the kernel runs at preinit's exec
+mount --rbind /dev /newroot/dev
+mount --bind /proc /newroot/proc
+mount --bind /sys /newroot/sys
+mount --bind /sys/kernel/config /newroot/sys/kernel/config
+
+# chroot, not switch_root: this ramdisk stays, with the rescue server running from it (ssh -p 2222
+# root@192.168.2.15 lands here; Harmattan is at /newroot). chroot in PID 1 also moves the root the
+# kernel's helpers (validator-init, modprobe, the firmware loader) run in
+echo "rescue: exec preinit"
+cd /newroot
+exec chroot /newroot /sbin/preinit

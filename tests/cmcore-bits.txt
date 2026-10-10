@@ -1,0 +1,3 @@
+a00 0=ssi_ssr_fck 9=mcbsp1_fck 10=mcbsp5_fck 11=gpt10_fck 12=gpt11_fck 13=uart1_fck 14=uart2_fck 15=i2c1_fck 16=i2c2_fck 17=i2c3_fck 18=mcspi1_fck 19=mcspi2_fck 20=mcspi3_fck 21=mcspi4_fck 22=hdq_fck 23=mspro_fck 24=mmchs1_fck 25=mmchs2_fck 30=mmchs3_fck 31=modem_fck
+a10 0=ssi_ick 1=sdrc_ick 3=sad2d_ick 4=hsotgusb_ick 6=omapctrl_ick 7=mailboxes_ick 9=mcbsp1_ick 10=mcbsp5_ick 11=gpt10_ick 12=gpt11_ick 13=uart1_ick 14=uart2_ick 15=i2c1_ick 16=i2c2_ick 17=i2c3_ick 18=mcspi1_ick 19=mcspi2_ick 20=mcspi3_ick 21=mcspi4_ick 22=hdq_ick 23=mspro_ick 24=mmchs1_ick 25=mmchs2_ick 26=des2_ick 27=sha12_ick 28=aes2_ick 29=icr_ick 30=mmchs3_ick
+a18 2=usbtll_ick 3=mad2d_ick

@@ -1,0 +1,257 @@
+#!/bin/busybox sh
+# RAM-boot test (0xFFFF -l -b): USB networking as the phone's SDK mode, dropbear for
+# ssh -p 2222 root@192.168.2.15 (key build/ramboot-key; stock's sshd keeps port 22), Harmattan's
+# rootfs read-only at /harmattan. Then stock Harmattan itself boots, unmodified, on overlays whose
+# writes stay in RAM (unless MyDocs/.ramboot/shell exists: this shell only). Writes only its log, to
+# MyDocs/.ramboot; never the OneNAND, the rootfs or /home (read-only block devices).
+/bin/busybox --install -s /bin
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+mount -t proc proc /proc
+mount -t sysfs sys /sys
+mount -t devtmpfs dev /dev
+exec >/dev/kmsg 2>&1
+echo on > /proc/sys/kernel/printk_devkmsg	# no rate limit: every line of this init reaches the log
+
+# The session, the only way back to stock Harmattan (the test phone's power button is broken): this
+# one process feeds the watchdogs (made nowayout here: nothing can stop them) until 10 minutes after
+# the last `touch /tmp/stay`, then reboots. If it dies or the reboot hangs, the watchdogs reset the
+# phone. Anything run over ssh can end it early with `reboot -f`. A power-off halts instead
+# (twl4030_power.poweroff_halt), and the watchdogs reset the phone then too.
+# OneNAND (CAL, NOLO's log) neither: nothing written, erased or locked
+# (onenand_omap2.read_only). Harmattan boots only with all four set
+safe=1
+for f in /sys/class/watchdog/watchdog0/nowayout /sys/class/watchdog/watchdog1/nowayout \
+	/sys/module/twl4030_power/parameters/poweroff_halt /sys/module/onenand_omap2/parameters/read_only; do
+	echo 1 > $f && case $(cat $f) in 1|Y) ;; *) false;; esac || { echo "ramboot: $f not set"; safe=; }
+done
+touch /tmp/stay
+# The loops here wait with `read -t` on a FIFO nothing writes, and use builtins where they can: a
+# fork (sleep, date, grep...) is a process event that Harmattan's ohmd classifies, a few a second
+# made it twice as busy as on stock
+mkfifo /tmp/.tick
+(
+	n=3 fds=
+	for w in /dev/watchdog[0-9] /dev/twl4030_wdt; do
+		[ -c $w ] && { eval "exec $n>$w"; fds="$fds $n"; n=$((n + 1)); }
+	done
+	exec 9<>/tmp/.tick
+	echo "ramboot: feeding$fds"
+	i=0
+	# the session's age checked once a minute (so it ends 600-660 s after the last touch)
+	while [ $((i % 12)) != 0 ] || [ $(($(date +%s) - $(stat -c %Y /tmp/stay))) -lt 600 ]; do
+		for f in $fds; do eval "echo . >&$f"; done
+		read -t 5 _ <&9
+		i=$((i + 1))
+	done
+	echo "ramboot: session over, rebooting"
+	reboot -f
+) &
+
+mkdir -p /dev/pts && mount -t devpts devpts /dev/pts
+# UART3, the debug console nothing here opens (console=tty0), idles after 3 s as stock's omap-serial
+# did: 8250_omap's default (autosuspend -1) keeps it, and with it the CORE domain, on for good
+echo 3000 > /sys/bus/platform/devices/49020000.serial/power/autosuspend_delay_ms
+mount -t configfs configfs /sys/kernel/config
+
+# CDC ECM with the ids and MACs of the phone's SDK mode: the Mac's en8 (static 192.168.2.14)
+g=/sys/kernel/config/usb_gadget/n9
+mkdir $g $g/strings/0x409 $g/functions/ecm.usb0 $g/configs/c.1
+echo 0x0421 > $g/idVendor
+echo 0x0519 > $g/idProduct
+echo Nokia > $g/strings/0x409/manufacturer
+echo "Nokia N9 RNDIS/Ethernet" > $g/strings/0x409/product
+echo 02:00:00:00:00:01 > $g/functions/ecm.usb0/host_addr
+echo 02:00:00:00:00:02 > $g/functions/ecm.usb0/dev_addr
+ln -s $g/functions/ecm.usb0 $g/configs/c.1/
+until [ -n "$(ls /sys/class/udc)" ]; do sleep 1; done
+ls /sys/class/udc | head -1 > $g/UDC
+ifconfig usb0 192.168.2.15 netmask 255.255.255.0 up
+
+mkdir -p /etc/dropbear
+dropbear -R -p 2222
+
+# Harmattan's rootfs and /home: read-only block devices (nothing on this kernel can write them, even by
+# mistake), mounted without journal replay
+mkdir -p /harmattan /home-lower
+for i in 1 2 3 4 5 6 7 8 9 10; do
+	for d in /dev/mmcblk?p2; do
+		[ -b $d ] && blockdev --setro $d && blockdev --setro ${d%2}3 &&
+			mount -t ext4 -o ro,noload $d /harmattan 2>/dev/null && break 2
+	done
+	sleep 1
+done
+root=$d home=${d%2}3
+mount -t ext4 -o ro,noload $home /home-lower
+
+# MyDocs (FAT), read-only with stock's options (Harmattan gets it through a read-only bind, below).
+# The kernel log goes to MyDocs/.ramboot/dmesg.txt every 30 s, readable from stock Harmattan after a
+# boot that never got ssh up: read-write only for that moment, so a reset leaves it clean (a crash's
+# last words are in pstore's console-ramoops, copied at the next boot).
+mkdir -p /mydocs
+mount -t vfat -o ro,nodev,noexec,nosuid,noatime,nodiratime,utf8,uid=29999,shortname=mixed,dmask=000,fmask=0133,rodir \
+	${root%2}1 /mydocs
+# Every minute also a line of power.txt, for battery tests with USB unplugged: the battery voltage
+# (MADC channel 12), whether USB power is there, and the idle states with CORE in retention (C5+)
+(
+	mount -t debugfs none /sys/kernel/debug 2>/dev/null
+	exec 9<>/tmp/.tick
+	n=0
+	while :; do
+		# in shell mode, or once Harmattan's mount-home has mounted MyDocs (a read-only mount of a
+		# read-write superblock fails, and mount-home would cover MyDocs with a tmpfs)
+		if { [ $n = 0 ] || [ ! -d /newroot/home/user ] || mountpoint -q /newroot/home/user/MyDocs; } &&
+			mount -o remount,rw /mydocs 2>/dev/null; then
+			mkdir -p /mydocs/.ramboot
+			# the previous boot's last copy kept once, for a boot that ended on its own
+			[ $n = 0 ] && [ -f /mydocs/.ramboot/dmesg.txt ] &&
+				mv /mydocs/.ramboot/dmesg.txt /mydocs/.ramboot/dmesg-prev.txt
+			# and what pstore kept of it in RAM (a panic, ramoops), once
+			if [ $n = 0 ]; then
+				mount -t pstore pstore /sys/fs/pstore 2>/dev/null
+				for f in /sys/fs/pstore/*; do [ -f "$f" ] && cp "$f" /mydocs/.ramboot/; done
+			fi
+			dmesg > /mydocs/.ramboot/dmesg.txt
+			if [ $((n % 2)) = 0 ]; then
+				c5=0 t5=0
+				for st in /sys/devices/system/cpu/cpu0/cpuidle/state[4-6]; do
+					c5=$((c5 + $(cat $st/usage))) t5=$((t5 + $(cat $st/time) / 1000000))
+				done
+				echo "$(date +%T) up $(cut -d' ' -f1 /proc/uptime) vbat $(cat /sys/bus/iio/devices/iio:device0/in_voltage12_input 2>/dev/null) mV usb $(cat /sys/class/power_supply/usb/online 2>/dev/null) C5+ $c5 x, $t5 s; $(grep -o 'core_pwrdm ([A-Z]*),OFF:[0-9]*,RET:[0-9]*' /sys/kernel/debug/pm_debug/count)" >> /mydocs/.ramboot/power.txt
+			fi
+			mount -o remount,ro /mydocs
+		fi
+		n=$((n + 1))
+		read -t 30 _ <&9
+	done
+) &
+# MyDocs/.ramboot/shell (made from stock Harmattan): stay in this shell for the RAM-boot tests
+[ -e /mydocs/.ramboot/shell ] && shell=1
+# Harmattan only on read-only disks, with the safety switches above set: anything else, this shell
+[ "$(blockdev --getro $root)$(blockdev --getro $home)" = 11 ] && mountpoint -q /harmattan &&
+	mountpoint -q /home-lower || { echo "ramboot: rootfs or /home not read-only, not booting Harmattan"; shell=1; }
+[ -n "$safe" ] || { echo "ramboot: a safety switch isn't set, not booting Harmattan"; shell=1; }
+if [ -n "$shell" ]; then
+	echo "ramboot: up (shell)"
+	# The panel is manual-update (DSI command mode): omapfb refreshes it by itself only in
+	# auto-update mode, for the tests here. Booting Harmattan, fb0 stays manual: the panel keeps
+	# NOLO's logo until preinit draws its boot image, and X then sends its own updates
+	echo 1 > /sys/class/graphics/fb0/update_mode
+	wait
+fi
+
+# Harmattan, read-only for testing: the rootfs and /home as overlays whose writes go to RAM (tmpfs)
+echo "ramboot: booting Harmattan"
+mkdir -p /ovl /newroot
+mount -t tmpfs -o size=256m,mode=755 ovl /ovl
+mkdir -p /ovl/root/upper /ovl/root/work /ovl/home/upper /ovl/home/work
+mount -t overlay overlay -o lowerdir=/harmattan,upperdir=/ovl/root/upper,workdir=/ovl/root/work /newroot
+mount -t overlay overlay -o lowerdir=/home-lower,upperdir=/ovl/home/upper,workdir=/ovl/home/work \
+	/newroot/home
+# MyDocs for Harmattan (music, photos...): stock's mount-home mounts it from fstab, read-only by this
+# line (the same superblock as /mydocs, and a read-only mount, so it stays read-only for Harmattan
+# even while the log is written); usb_moded's remount after mass storage too
+sed -i '\#^/dev/mmcblk0p1 /home/user/MyDocs # s#vfat noauto,#vfat ro,noauto,#' /newroot/etc/fstab
+# This kernel's modules (kernel/build.sh: the ones Harmattan loads, depmod's files in the form its
+# module-init-tools 3.4 reads), where the stock kernel's own are: udev and the jobs load them as stock
+k=/lib/modules/$(uname -r)
+cp -a $k /newroot/lib/modules/
+# and the firmware of ours that isn't built in (WLAN's), next to them: the loader looks there first
+echo -n $k/firmware > /sys/module/firmware_class/parameters/path
+# USB modes: usb_moded modprobes Nokia's gadgets (usb-moded-compat.patch). Through ramboot-usb (below):
+# SDK mode (g_ether) is this boot's SSH gadget, with stock's ids; mass storage and Ovi Suite, if
+# MyDocs/.ramboot/usb-modes exists, take the port from it until usb_moded unloads them (the loop before
+# preinit gives it back, and keeps the session while they're in use). MyDocs is exported read-only, as
+# Harmattan mounts it here
+cat > /newroot/etc/modprobe.d/ramboot-usb.conf <<EOF2
+install g_ether /usr/sbin/ramboot-usb g_ether \$CMDLINE_OPTS
+install g_file_storage /usr/sbin/ramboot-usb g_file_storage \$CMDLINE_OPTS
+install g_nokia /usr/sbin/ramboot-usb g_nokia \$CMDLINE_OPTS
+options g_file_storage ro=1
+EOF2
+cat > /newroot/usr/sbin/ramboot-usb <<'EOF2'
+#!/bin/sh
+# The RAM-boot test image (ramboot/init): usb_moded loads a USB gadget. SDK mode (g_ether) is the
+# boot's own ECM gadget (stock's ids, usb0); another gadget takes the port from it first
+g=/sys/kernel/config/usb_gadget/n9
+m=$1; shift
+if [ $m = g_ether ]; then
+	[ -n "$(cat $g/UDC)" ] || ls /sys/class/udc | head -1 > $g/UDC
+	exit 0
+fi
+# Mass storage and Ovi Suite only when asked for (MyDocs/.ramboot/usb-modes, or a test's flag in /tmp):
+# else the port stays the test boot's SSH, whatever the USB mode setting (stock's default here is mass
+# storage, which took ssh away on the first boot with this)
+[ -e /home/user/MyDocs/.ramboot/usb-modes ] || [ -e /tmp/.ramboot-usb-modes ] || exit 0
+touch /tmp/.ramboot-usb-legacy
+echo > $g/UDC
+exec /sbin/modprobe --ignore-install $m "$@"
+EOF2
+chmod 755 /newroot/usr/sbin/ramboot-usb
+# No setup wizard (cherry): its state is in Aegis protected storage, sealed with keys the emulated BB5
+# lacks, so it reads as invalid and the wizard starts (and crashes); cherry-checker honours this
+touch /newroot/var/dont_start_suw
+# A job that keeps failing on the test kernel doesn't reboot the phone (Nokia's upstart does, for jobs
+# with a `reboot` stanza: mce, bme, dbus, hal, X...); the session reboots it
+for f in $(grep -l '^reboot[[:space:]]*$' /newroot/etc/init/*.conf /newroot/etc/init/*/*.conf); do
+	sed -i '/^reboot[[:space:]]*$/d' $f
+done
+# /dev, /proc and /sys, also for validator-init, which the kernel runs at preinit's exec
+mount --rbind /dev /newroot/dev
+mount --bind /proc /newroot/proc
+# validator-init's malfunction path resets the phone through /proc/sysrq-trigger ('b': no sync, MyDocs
+# maybe rw): not from Harmattan's root (this initramfs's /proc keeps it); the session reboots instead
+mount --bind /dev/null /newroot/proc/sysrq-trigger
+mount --bind /sys /newroot/sys
+mount --bind /sys/kernel/config /newroot/sys/kernel/config
+
+# chroot, not switch_root: this initramfs stays, with the session, the log and dropbear running
+# from it (ssh root@192.168.2.15 lands here; chroot /newroot for Harmattan). chroot in PID 1 also
+# moves the root that the kernel's helpers (validator-init, modprobe) run in.
+# camera-debug: a crash of any process (DSME at boot) in the kernel log
+echo 1 > /proc/sys/kernel/print-fatal-signals
+
+# The SSH gadget back whenever usb_moded's gadget is gone (charging only, unplugged), so the port
+# never stays without it (a mode switched to just now has 10 s to load)
+(
+	exec 9<>/tmp/.tick
+	# MyDocs back for Harmattan after mass storage (read-only, as the init's own bind). The shell's
+	# read takes a file a byte at a time: the long ones (mounts, the FIB) only every 30 s
+	mydocs() {
+		m=; while read _ l _; do [ "$l" = /newroot/home/user/MyDocs ] && m=1; done < /proc/mounts
+		[ -n "$m" ] || { mount --bind /mydocs /newroot/home/user/MyDocs &&
+			mount -o remount,bind,ro /newroot/home/user/MyDocs; }
+	}
+	i=0
+	while :; do
+		read -t 3 _ <&9
+		i=$((i + 1))
+		# ssh's address back if something took usb0 down while the SSH gadget is bound
+		# (usb_moded's ifdown usb0 on a USB event): up (IFF_UP), and 192.168.2.15 in the FIB
+		u=; read u < $g/UDC
+		if [ -n "$u" ]; then
+			fl=0; read fl < /sys/class/net/usb0/flags 2>/dev/null
+			m=1
+			if [ $((i % 10)) = 0 ]; then
+				m=; while read l; do case $l in *" 192.168.2.15") m=1;; esac; done < /proc/net/fib_trie
+				mydocs
+			fi
+			[ -n "$m" ] && [ $((fl & 1)) = 1 ] ||
+				{ ifconfig usb0 192.168.2.15 netmask 255.255.255.0 up && echo "ramboot: usb0 up again"; }
+			continue
+		fi
+		# usb_moded's gadget instead: a mode asked for, in use on a computer, keeps the session too
+		m=; while read l _; do case $l in g_file_storage|g_nokia) m=1;; esac; done < /proc/modules
+		[ -n "$m" ] && { touch /tmp/stay; continue; }
+		mydocs
+		f=/newroot/tmp/.ramboot-usb-legacy
+		[ -e $f ] && [ $(($(date +%s) - $(stat -c %Y $f))) -lt 10 ] && continue
+		rm -f $f
+		# (usb_moded's ifdown usb0 on a mode change took ssh's address away too)
+		ls /sys/class/udc | head -1 > $g/UDC && ifconfig usb0 192.168.2.15 netmask 255.255.255.0 up &&
+			echo "ramboot: SSH gadget back on USB"
+	done
+) &
+
+echo "ramboot: exec preinit"
+cd /newroot
+exec chroot /newroot /sbin/preinit

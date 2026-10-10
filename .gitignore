@@ -1,0 +1,19 @@
+# kernel/build.sh and tests/build.sh output, logs, boot dumps, stock flash dumps, Nokia firmware
+# and the ramboot ssh private key: all generated or not ours to publish
+/build/
+
+# Claude Code worktrees and per-user settings
+/.claude/worktrees/
+/.claude/settings.local.json
+
+.DS_Store
+__pycache__/
+*.pyc
+
+# Nokia firmware copied from the stock PR1.3 rootfs (FIRMWARE.md): not redistributable
+/blobs/
+
+# the documentation site's dependencies and build (docs/: npm install, npm run build)
+node_modules/
+/docs/.vitepress/cache/
+/docs/.vitepress/dist/

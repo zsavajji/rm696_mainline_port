@@ -2382,7 +2382,7 @@ speaker. Backups of the rootfs, /home and CAL were taken first (`~/n9-backup/202
 matched on both sides). Not checked yet: power-off, ACT_DEAD and alarm power-on (test boots halt),
 CAL writes (test boots read-only), headphones.
 
-## WLAN: Nokia's driver and stock's firmware (2026-10-16/17; rm696 bcac265b3)
+## WLAN: Nokia's driver and stock's firmware (2026-10-16/17; rm696 1c7f2dcac)
 
 Standby on a 5 GHz access point drew 119-158 mA on wlcore (CORE ON 45-100%), where stock draws
 9.7 mA on the same channel in the same spot (stock: `tests/stock-current.sh`, BME's battery current

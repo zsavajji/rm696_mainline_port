@@ -21,7 +21,7 @@ recovered. This file is the procedure for when I decide to go ahead.
 
 ## Status (2026-10-17)
 
-- **The image**: `RELEASE=1 kernel/build.sh` -> `build/zImage-n9-release`. Kernel: rm696 = bcac265b3 since 2026-10-17
+- **The image**: `RELEASE=1 kernel/build.sh` -> `build/zImage-n9-release`. Kernel: rm696 = 1c7f2dcac since 2026-10-17
   (me: "ok so merge everything"): the WLAN chip runs Nokia's driver with stock's firmware (5 GHz standby 18 mA,
   wlcore drew 119; `NOTES.md`, "WLAN: Nokia's driver and stock's firmware"), stock's ELP and SD-slot idle delays,
   the stock C7 (9066b7305); before: 0ffa2dc43, 2026-10-10 (v6.18.55 merged, the OFF-mode fixes of 592e0d149;

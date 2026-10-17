@@ -126,14 +126,26 @@ saves. Bluetooth on changes nothing ([Bluetooth](./bluetooth)).
 With the screen on and still and WLAN associated, CORE now retains as on stock: 208 retentions in 90 s
 (0 before `ff7ed3abd`/`e16a0248f`, below).
 
-Battery drain: with CORE stuck ON overnight (the charger bug below) the drain was about 25-70 mA. The
-standby drain with all of this page's fixes has not been measured yet.
+Battery drain: with CORE stuck ON overnight (the charger bug below) the drain was about 25-70 mA.
+Standby on a 5 GHz access point, WLAN associated, screen off: 18 mA with Nokia's WLAN driver
+([WLAN power save](#wlan-power-save)), CORE OFF 25% of the time; with the I2C fix below, CORE OFF
+41% and 13-15 mA, with phases of about 9 mA more that nothing on the SoC side explains (stock shows
+the same kind of phases: 6-8 and 11-16 mA on the same access point).
+
+### I2C after CORE OFF
+
+`9e69d67db`: the first access to each I2C bus after every CORE OFF took 14 ms with interrupts off
+(BME's and DSME's, a few times a second in standby). After OFF the I2C comes back reset, and it sets
+RESETDONE only once its enable bit is set; the hwmod waited for RESETDONE before the driver could set
+it, for its whole 10 ms timeout (`_enable_sysc()`, 152 of 649 enables in 2 minutes, kprobe timings).
+The driver waits for it itself, with the enable bit set, when it resets the controller; the hwmod no
+longer does. The I2C's wake-up path now takes under 0.4 ms.
 
 ### Not done
 
 - Stock's retention voltage setting (0.8375 V) and its watchdog guard around OFF are not ported.
-- With WLAN associated, beacon wakes every 100-300 ms rarely leave C7's 158 ms residency, on either
-  kernel: retention is what WLAN standby gets. Not measured as such.
+- With WLAN associated, about 29 wake-ups a second remain in standby (stock's are fewer), and the
+  idle governor picks retention for many idles long enough for OFF.
 - Once, CORE stayed ON for ~40 s with nothing found holding it; `tests/coresample.sh` names the holder
   if it happens again.
 

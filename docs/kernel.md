@@ -44,6 +44,9 @@ Fixed in the tree, each in its own commit (`git log --grep` finds them by subjec
   Nokia's driver instead, see [Power](./power#wlan-power-save)).
 - `usb: musb: don't restore a context the controller kept`: the USB network dead after a replug.
 - `usb: musb: gadget: don't flush the RX FIFO when queueing a request`: mass-storage writes stalled.
+- `ARM: OMAP3: hwmod: don't wait for the I2C's RESETDONE in the hwmod`: after every CORE OFF the
+  first access to each I2C bus spun 14 ms with interrupts off, waiting for a bit the I2C sets only
+  once enabled ([Power](./power#i2c-after-core-off)).
 - `serial: 8250: drop the TX runtime PM reference at shutdown` and `serial: 8250_omap: raise RTS after
   the EFR write when autoRTS is on`: Bluetooth's UART stuck awake, and its first byte after a wakeup
   misread at 3.69 Mbaud.

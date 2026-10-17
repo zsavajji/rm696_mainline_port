@@ -2412,6 +2412,23 @@ op_tx's station rides to the TX work in the rate slot mac80211 leaves to drivers
 control; Nokia's `ieee80211_{en,dis}able_dyn_ps()` (BT coexistence) became a driver flag; the MAC
 address comes from the chip's fuse (Nokia's driver registered zeros and nothing in Harmattan sets one).
 
+## I2C after CORE OFF (2026-10-17 evening; rm696 9e69d67db)
+
+BME (`bme_RX-71`, `/dev/i2c-1` and `-2`) and DSME (the watchdog kicks through the TWL) spent 1-2.3% of
+standby in the kernel in runs of ~14 ms, only once CORE had slept. Kprobe timings on the I2C runtime
+resume (`tests/slowcall.sh` with entry/return probes, two 2-minute captures): the clocks under 0.34 ms,
+`omap3xxx_cm_wait_module_ready` under 0.3, the clock-domain and power-domain steps under 0.13, but
+`_enable_sysc()` exactly 13.977 ms in 152 of 649 hwmod enables: its `_wait_softreset_complete()` ran
+the whole 10000 x `udelay(1)` timeout with IRQs off. After CORE OFF the I2C comes back reset and sets
+RESETDONE only once I2C_EN is set (i2c-omap's reset says so), which the driver does after the hwmod's
+wait; the driver then went on with the bit still 0, as it always had.
+
+`9e69d67db` drops SYSS_HAS_RESET_STATUS from the OMAP3 I2C's hwmod sysconfig: `_enable_sysc()` 0.09 ms
+at most, the I2C enables 125 ms in 2 minutes instead of 2252. Standby on 5 GHz (3.7 h, channel 100):
+CORE OFF 40-42% (25% before), 13-15 mA for an hour and the last 30 minutes, 23-24 mA for 2.5 hours in
+between with the CORE states, wake-ups, interrupts and CPU clocks unchanged: something outside the SoC
+(the modem's network state, most likely; stock's own run had 6-8 and 11-16 mA phases).
+
 ## Kernel speed against stock (2026-10-03 night, boots 101-106)
 
 `tests/kbench.c` on the same phone, CPU at 1 GHz:

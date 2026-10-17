@@ -11,7 +11,6 @@ sensors, lens and flash) are modules that udev loads once Harmattan's root is up
 
 | File | For | From | Where |
 |---|---|---|---|
-| `ti-connectivity/wl127x-fw-5-sr.bin` | WLAN (stock's 2011 `wl1271-fw.bin` is older than wlcore accepts) | linux-firmware | the initramfs, next to the modules (`firmware_class.path`) |
 | `regulatory.db`, `regulatory.db.p7s` | cfg80211's country limits | wireless-regdb | built into the kernel (`CONFIG_EXTRA_FIRMWARE`) |
 
 ## From the phone's Harmattan root
@@ -22,6 +21,7 @@ Nothing to copy: they stay on the phone.
 |---|---|---|---|
 | `/lib/firmware/ti1273_le.bin` (chip 0xd1/0xf1), `ti1273_prele.bin` (0xe1), `ti1273.bin` (others) | Bluetooth | kernel (`hci_nokia`), at each power-on | bt-firmware-ti1273 0.23+0m6 |
 | `/lib/firmware/smiapp-sensor-*.bin` (17), `smia-sensor-*.bin` (4); this N9's: `0b-0125-*` (imx125, main), `0c-2134-*` (tcm8500md, front) | Cameras: Nokia's register lists | kernel (`smiapp`), at sensor probe | rx71-camera-fw 0.0.51+0m7 |
+| `/lib/firmware/wl1271-fw.bin` (6.1.1.39.339) | WLAN | kernel (`wl12xx`, Nokia's driver), at each WLAN power-up | wl1271-firmware 0.22+0m6 |
 | `/lib/firmware/radio-wl1273-fw.bin` | FM radio | kernel (`wl1273-core`), at the first FM power-up | wl1273-fm-radio-firmware 2.26+0m6 |
 | `/lib/dsp/baseimage.dof` | DSP bridge | kernel (`bridgedriver`), at modprobe and after a DSP crash; path from stock's `/etc/modprobe.d/bridgedriver` | omap3-dsp-baseimage-ti 0.i3.6-20+0m7 |
 | `/lib/dsp/*.dll64P` (17) | DSP codecs (video, camera) | kernel bridge, when gst-dsp creates a node | omap3-dsp-libraries-ti 0.i3.6-20+0m7, omap3-dsp-hd-codecs 0.3.9-6+0m7 |
@@ -30,7 +30,8 @@ Nothing to copy: they stay on the phone.
 | `/usr/share/mxt-config/configs/RM-696_Pyrenees_SMD_ES40_V1_6.bin` | Touchscreen config | `mxt_configure.sh`, only on a CRC mismatch (the chip's NVM normally holds it already) | mxt-config 0.0.29+0m6 |
 | NFC image inside `/usr/lib/libNXP_NFC_HAL.so.1.0.0` | PN544 | nfcd would reflash the chip on a version mismatch; the kernel refuses firmware mode unless `nokia_pn544.allow_fw_mode=1` | libnfchal 2.2+0m8 |
 
-Stock files nothing loads: `wl1271-fw.bin` and `wl1271-nvs.bin` (wl1271-firmware), `et8en2-000{2,4}.bin`
+Stock files nothing loads: `wl1271-nvs.bin` (wl1271-firmware; only if no calibration was pushed before
+the first WLAN power-up), `et8en2-000{2,4}.bin`
 and `tcm8580md-0001.bin` (rx71-camera-fw), the `omap3_pa*` files for other KCI values, and
 `omap3_pafmt.bin` (its unsigned fallback is compiled out).
 
@@ -43,6 +44,7 @@ FIASCO image. Only needed for reading them on a computer; the build doesn't use 
 
 ## Per-device data: never copy between phones
 
-- **WLAN calibration and MAC address**: CAL's `wlan-nvs-t1` on OneNAND. At every boot Harmattan's
-  `wl1271-cal` job reads it and pushes it to the driver (nl80211 testmode), as on stock.
+- **WLAN calibration**: CAL's `wlan-nvs-t1` on OneNAND. At every boot Harmattan's `wl1271-cal` job reads
+  it and pushes it to the driver (nl80211 testmode), as on stock. `wlan0`'s address comes from the WLAN
+  chip's fuse (the BD_ADDR there plus one), which the driver writes into the calibration at each chip boot.
 - **Camera module calibration**: the sensor's own NVM, which camd reads.

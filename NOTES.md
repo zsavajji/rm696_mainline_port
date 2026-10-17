@@ -514,7 +514,8 @@ WLAN (tested 2026-10-01: scan, WPA2-PSK through Nokia's eapd, DHCP, internet):
 - The job first writes CAL's `wlan-nvs-t1` (`tests/wlan-nvs.c`, via libcal) to
   `ti-connectivity/wl127x-nvs.bin` (wlcore names it per chip family, `wlcore/sdio.c`). Mainline wlcore
   loads it at probe, where Nokia's took an nl80211 testmode push.
-- Firmware: linux-firmware's `wl127x-fw-5-sr.bin`.
+- Firmware: linux-firmware's `wl127x-fw-5-sr.bin` (until 2026-10-17: now Nokia's driver with stock's
+  firmware, see "WLAN: Nokia's driver and stock's firmware").
 - Harmattan's own stack runs unchanged on mainline nl80211: `wlancond` (association; its "Error in
   netlink message length" and "set channel ret=-16" are harmless), `eapd` (the 4-way handshake over
   a packet socket, keys through nl80211), `icd2` and its `udhcpc`.
@@ -2380,6 +2381,36 @@ autofocus and the flash firing (their Qt app; camera-ui stays in standby on a re
 speaker. Backups of the rootfs, /home and CAL were taken first (`~/n9-backup/2026-10-09`, checksums
 matched on both sides). Not checked yet: power-off, ACT_DEAD and alarm power-on (test boots halt),
 CAL writes (test boots read-only), headphones.
+
+## WLAN: Nokia's driver and stock's firmware (2026-10-16/17; rm696 bcac265b3)
+
+Standby on a 5 GHz access point drew 119-158 mA on wlcore (CORE ON 45-100%), where stock draws
+9.7 mA on the same channel in the same spot (stock: `tests/stock-current.sh`, BME's battery current
+every 10 s). What it wasn't, from unplugged A/B runs: wlcore's beacon filter and early termination on
+5 GHz (`02e4b43be`, unmerged), its forced legacy power save, waking every 3rd DTIM instead of every one
+(126/132 vs 144/144 mA), the menu governor and the -EBUSY idle fix, the CPU's clock; stock's two idle
+delays (ELP 5 ms, the WLAN slot's SD host 10 ms) took 17 mA off and are kept (`8f1aa5bd8`,
+`6878fd12c`). linux-firmware's multi-role 6.5.7.0.50 doesn't run on this chip (TX stuck, recovery loop).
+
+Stock runs its own wl12xx (2.6.37/38-era mainline plus Nokia's changes; kernel-plus-harmattan's copy
+holds 152 of the 154 messages in stock's `wl12xx.ko`) with TI firmware 6.1.1.39.339, which wlcore can't
+drive (pre-roles API). It's ported as `drivers/net/wireless/ti/wl1271` (modules `wl12xx` and
+`wl12xx_sdio`, as stock; `CONFIG_WL1271_NOKIA`, wlcore left out). Stock's firmware loads from Harmattan's
+`/lib/firmware`, the NVS comes through `wl1271-cal`'s testmode push, and the sysfs knobs `wlancond` uses
+are back at `/sys/devices/platform/wl1271`.
+
+The first run of the port idled at 113 mA too, which settled it: its firmware counters (decodable for
+6.1) read `ps_enter` 0, and wlcore's 6.3 ones had read the same. The driver's flags (a kprobe on
+`wl1271_ps_elp_sleep`, `+52(%r0)`) said PSM requested but never associated: 2.6.3x mac80211 reported
+the BSSID and the association in one `bss_info_changed`, and the join the BSSID triggers set the
+association up; 6.18 reports the BSSID at authentication and the association alone. Setting it up on
+its own (`50ad704e2`): 18.2 mA over 3 hours on the same channel and spot (median 15; CORE ON 13%,
+RET 39%, OFF 25%; 0.9 WLAN interrupts a second). What's left to stock's 9.7 mA is CORE OFF.
+
+Port notes: 6.18 scans idle (2.6.3x left idle for a scan), so the driver joins for a scan from idle;
+op_tx's station rides to the TX work in the rate slot mac80211 leaves to drivers with their own rate
+control; Nokia's `ieee80211_{en,dis}able_dyn_ps()` (BT coexistence) became a driver flag; the MAC
+address comes from the chip's fuse (Nokia's driver registered zeros and nothing in Harmattan sets one).
 
 ## Kernel speed against stock (2026-10-03 night, boots 101-106)
 

@@ -34,13 +34,11 @@ sudo apt install gcc gcc-arm-linux-gnueabihf make bc bison flex libssl-dev libel
 The build downloads the rest:
 
 - from **Alpine Linux** v3.24 (armv7): the static BusyBox and dropbear for the initramfs;
-- from **linux-firmware**: the WLAN chip's firmware (`ti-connectivity/wl127x-fw-5-sr.bin`);
 - from **wireless-regdb**: the signed regulatory database.
 
-Nothing of Nokia's is needed or included: the phone loads its own firmware (see [Firmware](./firmware)).
-Their licences, for anyone passing the image on: BusyBox is GPL-2.0 (its source is Alpine's), dropbear
-and musl are MIT, the WLAN firmware is under linux-firmware's `LICENCE.ti-connectivity`, and
-wireless-regdb is ISC.
+Nothing of Nokia's is needed or included: the phone loads its own firmware, the WLAN chip's included
+(see [Firmware](./firmware)). Their licences, for anyone passing the image on: BusyBox is GPL-2.0 (its
+source is Alpine's), dropbear and musl are MIT, and wireless-regdb is ISC.
 
 ## Where it builds
 

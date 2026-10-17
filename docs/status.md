@@ -52,6 +52,5 @@ tried with a SIM yet, and the image has only been booted from RAM, never flashed
   signed by Nokia, as with stock's open-mode kernel, so `bme`, `mce` and `dsme` log failed writes
   (`onenand_wait: controller error`). Nothing is written; settings that live in CAL keep their values
   (see [Power](./power#cal-and-onenand)).
-- WLAN's transmit power doesn't follow the regulatory database's caps (mainline's wlcore never applies
-  them; Nokia's per-phone calibration limits do apply), so on a few 5 GHz channels in some countries
-  the phone can transmit above the legal limit.
+- WLAN's transmit power follows what Nokia's driver applies (mac80211's power level, Nokia's
+  per-phone calibration limits), as on stock.

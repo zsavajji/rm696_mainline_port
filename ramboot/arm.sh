@@ -12,7 +12,9 @@ nokia_ids() { ioreg -p IOUSB -l -w0 | awk '/\+-o /{if (v == 1057) print p; v = p
 	/"idProduct" = /{p = $NF} /"idVendor" = /{v = $NF} END{if (v == 1057) print p}'; }
 while :; do
 	echo "--- waiting for NOLO (reboot the phone)"
-	until nokia_ids | grep -qvE '^13(0[0-9]|1[01])$'; do sleep 0.1; done
+	# NOLO is 0x421:0x105 (261); "any id but stock's modes" also fired on an id stock shows while
+	# rebooting, and that 0xFFFF then missed NOLO (2026-10-17)
+	until nokia_ids | grep -qx 261; do sleep 0.1; done
 	out=$(build/0xFFFF -m kernel:build/zImage-n9-boot -l -b 2>&1 | tee /dev/tty | sed -E 's/(serial number string: ).*/\1<redacted>/' | tee -a build/arm.log)
 	case "$out" in *"No device detected"*) ;; *) break ;; esac
 done

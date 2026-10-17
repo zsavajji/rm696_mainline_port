@@ -40,7 +40,8 @@ Fixed in the tree, each in its own commit (`git log --grep` finds them by subjec
 - `clk: ti: mux: no latch bit for composite muxes`: every parent change of a TI composite mux toggled
   bit 0 of its register; on the N9 the SGX lost its clock when DPLL4 stopped (since Linux 4.17).
 - `wifi: wlcore: fix runtime PM leaks in firmware restarts` and `wifi: wlcore: don't leak runtime PM
-  when setting TX power fails`: the WLAN chip never entered its low-power state.
+  when setting TX power fails`: the WLAN chip never entered its low-power state (the N9 now runs
+  Nokia's driver instead, see [Power](./power#wlan-power-save)).
 - `usb: musb: don't restore a context the controller kept`: the USB network dead after a replug.
 - `usb: musb: gadget: don't flush the RX FIFO when queueing a request`: mass-storage writes stalled.
 - `serial: 8250: drop the TX runtime PM reference at shutdown` and `serial: 8250_omap: raise RTS after

@@ -19,9 +19,12 @@ recovered. This file is the procedure for when I decide to go ahead.
 
 (4: read-write decided 2026-10-09, see below; the flash is still my call.)
 
-## Status (2026-10-10)
+## Status (2026-10-17)
 
-- **The image**: `RELEASE=1 kernel/build.sh` -> `build/zImage-n9-release`. Kernel: rm696 = 0ffa2dc43 since 2026-10-10 (v6.18.55 merged, the OFF-mode fixes of 592e0d149;
+- **The image**: `RELEASE=1 kernel/build.sh` -> `build/zImage-n9-release`. Kernel: rm696 = bcac265b3 since 2026-10-17
+  (me: "ok so merge everything"): the WLAN chip runs Nokia's driver with stock's firmware (5 GHz standby 18 mA,
+  wlcore drew 119; `NOTES.md`, "WLAN: Nokia's driver and stock's firmware"), stock's ELP and SD-slot idle delays,
+  the stock C7 (9066b7305); before: 0ffa2dc43, 2026-10-10 (v6.18.55 merged, the OFF-mode fixes of 592e0d149;
   before: 4c925f7a5, 2026-10-09 16:35 (me: "the main kernel repo should only have the last working state to be
   pushed": release-image fast-forwarded into rm696, every other branch deleted, kept in
   `~/n9-backup/2026-10-09/kernel-branches-before-cleanup.bundle`; 4c925f7a5 = 777e7d932 + `README.md`).

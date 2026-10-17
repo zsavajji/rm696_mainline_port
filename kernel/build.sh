@@ -76,15 +76,9 @@ cp $N/ramboot/${RELEASE:+release-}init $R/init && chmod 755 $R/init	# the kernel
 [ -z "$RESCUE_ANY" ] || { mkdir -p $R/etc && touch $R/etc/rescue-any; }
 mkdir -p $R/proc $R/sys $R/dev $R/tmp $R/etc/dropbear $R/root/.ssh
 # Firmware built into the kernel (rm696.config CONFIG_EXTRA_FIRMWARE, from $N/firmware), none of it
-# Nokia's: Nokia's own (Bluetooth, the camera sensors, the DSP...) loads from the phone's /lib/firmware.
-# WLAN's from linux-firmware (stock's 2011 wl1271-fw.bin is older than wlcore accepts; single-role
-# only: multi-role (P2P) and PLT (production test) left out to keep the image small)
-LF=https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain
-mkdir -p $N/firmware/ti-connectivity
-for f in ti-connectivity/wl127x-fw-5-sr.bin; do
-  [ -s $N/firmware/$f ] || curl -fsSL -o $N/firmware/$f $LF/$f
-done
-# and the signed wireless regulatory database (wireless-regdb, signed with a key 6.18 has built in),
+# Nokia's: Nokia's own (Bluetooth, WLAN, the camera sensors, the DSP...) loads from the phone's /lib/firmware.
+mkdir -p $N/firmware
+# The signed wireless regulatory database (wireless-regdb, signed with a key 6.18 has built in),
 # which cfg80211 loads at boot: it then follows the AP's country instead of the world domain's limits
 RG=https://git.kernel.org/pub/scm/linux/kernel/git/wens/wireless-regdb.git/plain
 for f in regulatory.db regulatory.db.p7s; do
@@ -136,13 +130,19 @@ K=$R/lib/modules/$KREL && mkdir -p $K/extra
 # WLAN's chip drivers; icd2's IDLETIMER target; Nokia's USB gadgets for usb_moded; the DSP bridge for
 # gst-dsp; swap (enable-swap's ramzswap); Bluetooth's UART driver; the camera sensors, lens and flash;
 # IPv6 (autoloaded as net-pf-10); the TWL watchdog where a branch builds it as a module
-for m in wlcore wl12xx wlcore_sdio xt_IDLETIMER g_nokia g_file_storage g_ether bridgedriver ramzswap \
+for m in wl12xx wl12xx_sdio wlcore wlcore_sdio xt_IDLETIMER g_nokia g_file_storage g_ether bridgedriver ramzswap \
   zsmalloc hci_uart hci_nokia btbcm smiapp ad58xx as3645a ipv6 twl4030_wdt; do
   find $X/lib/modules/$KREL/kernel -name $m.ko -exec cp {} $K/extra/ \;
 done
-# WLAN's firmware, where the init points the firmware loader (firmware_class.path), unless built in
-grep -q "^CONFIG_EXTRA_FIRMWARE=.*wl127x" $O/.config ||
-  install -D -m 644 $N/firmware/ti-connectivity/wl127x-fw-5-sr.bin $K/firmware/ti-connectivity/wl127x-fw-5-sr.bin
+# WLAN's firmware: Nokia's driver (wl1271/, rm696.config's) runs stock's from Harmattan's /lib/firmware.
+# Only a config with mainline's wlcore needs linux-firmware's (single-role, 6.3.10), where the init
+# points the firmware loader (firmware_class.path)
+if grep -q "^CONFIG_WLCORE=" $O/.config; then
+  f=ti-connectivity/wl127x-fw-5-sr.bin; mkdir -p $N/firmware/ti-connectivity
+  [ -s $N/firmware/$f ] || curl -fsSL -o $N/firmware/$f \
+    https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/$f
+  install -D -m 644 $N/firmware/$f $K/firmware/$f
+fi
 ${CROSS}strip --strip-debug -o $K/extra/pvrsrvkm.ko $N/pvr/pvrsrvkm.ko
 ${CROSS}strip --strip-debug -o $K/extra/omaplfb.ko $N/pvr/omaplfb.ko
 cp $X/lib/modules/$KREL/modules.builtin* $K/	# so depmod knows what's built in

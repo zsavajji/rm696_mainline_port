@@ -274,15 +274,22 @@ tried on a phone ([Status](./status)).
 
 ## WLAN power save
 
-- The chip never reached its low-power state (ELP) in mainline: wlcore leaked runtime PM references
-  in two error paths (`b32f49444`, `465c09f78`).
-- `1839014b6`: the firmware keeps the chip awake for `dynamic_ps_timeout` after every frame; mainline's
-  wl12xx sets 1500 ms, stock's mac80211 100 ms. On the release's first day the chip's runtime PM was
-  active 9097 s and suspended 9147 s, about 4 hours of it associated, with under 2 packets a second:
-  frames a second or so apart kept 1.5 s from ever expiring. Now 100 ms; its effect is not measured
-  yet. Live: `/sys/kernel/debug/ieee80211/phy0/wlcore/dynamic_ps_timeout`.
-- On a quiet network the chip slept 98% of the time; pings every second saw ~140 ms round trips, as
-  802.11 power save does. `wlancond` only switches power save on or off, as on stock.
+The WLAN chip runs Nokia's own driver and firmware, as on stock (`drivers/net/wireless/ti/wl1271`:
+Nokia's wl12xx ported to 6.18, with stock's firmware 6.1.1.39.339 from Harmattan's `/lib/firmware`).
+Mainline's wlcore with linux-firmware's 6.3.10 never got the chip into power save on 5 GHz: standby
+drew 119 mA on a 5 GHz channel where stock draws 9.7 mA (same channel, same spot; the firmware's
+`ps_enter` counter stayed 0), and its 6.5.7 multi-role firmware doesn't run on this chip.
+
+- Nokia's driver expects mac80211 to report the association together with the BSSID, as 2.6.3x did;
+  6.18 reports the BSSID at authentication and the association alone, and without its join the driver
+  never counted itself associated, so it never entered power save (`50ad704e2`). With that, standby on
+  the same 5 GHz channel: 18 mA over 3 hours, CORE OFF 25% of the time, 0.9 WLAN interrupts a second.
+- The chip goes to ELP 5 ms after the last access (the driver's `ELP_ENTRY_DELAY`), and the WLAN slot's
+  SD host turns its clocks off 10 ms after the last transfer, as stock's kernel (`6878fd12c`).
+- Stock's sysfs knobs are back where `wlancond` looks for them (`/sys/devices/platform/wl1271`:
+  `scan_size`, `scan_delay`, `bt_coex_state`, `allow_adhoc`, `hw_pg_ver`), and `wl1271-cal` pushes the
+  CAL calibration through nl80211 testmode, as on stock. `wlan0`'s address comes from the chip's fuse,
+  as it did with wlcore.
 
 ## Other drivers' idle
 

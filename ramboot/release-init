@@ -4,7 +4,8 @@
 # dropbear on the USB network only (192.168.2.15, port 2222; stock's sshd keeps 22), root, with the
 # phone's own keys (/root/.ssh/authorized_keys, read at each login) and, if /root/.ssh/dropbear-password
 # exists, root's own Harmattan password too (never the factory one). Nothing in the image is a key or a
-# password, and no Harmattan file is changed. The watchdogs are DSME's, as stock.
+# password, and no Harmattan file is changed. The watchdogs are DSME's, as stock; a boot watchdog below
+# warm-resets a boot that never reaches Harmattan's syslogd.
 /bin/busybox --install -s /bin
 export PATH=/bin:/sbin:/usr/bin:/usr/sbin
 mount -t proc proc /proc
@@ -12,6 +13,20 @@ mount -t sysfs sys /sys
 mount -t devtmpfs dev /dev
 exec >/dev/kmsg 2>&1
 echo on > /proc/sys/kernel/printk_devkmsg	# every line of this init reaches the log
+
+# Boot watchdog (2026-10-13: an image hung before Harmattan's syslogd, logo on screen and the rescue
+# link down; with no working power button only a battery pull ended it, and that lost the log). If
+# Harmattan's syslogd isn't running 10 minutes from here, and no e2fsck is, sync, remount everything
+# read-only and warm-reset: RAM survives a warm reset, so the next boot finds this one's console in
+# pstore. Arm 0xFFFF with a known-good image before trying a new one.
+(
+	sleep 600
+	while ps | grep -q '[e]2fsck'; do sleep 30; done
+	ps | grep -q '[s]yslogd' && exit 0
+	echo "rescue: Harmattan not up 10 minutes after boot: resetting"
+	echo s > /proc/sysrq-trigger; sleep 2; echo u > /proc/sysrq-trigger; sleep 2
+	echo b > /proc/sysrq-trigger
+) &
 
 # UART3, the debug console nothing opens, idles after 3 s as stock's omap-serial did (8250_omap's default
 # keeps it, and with it the CORE domain, on for good)

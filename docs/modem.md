@@ -1,8 +1,9 @@
 # Modem and BB5
 
 The cellular modem comes up at the ISI level as on stock: Harmattan's `csd` and `sscd` reach their
-ready states, and the call-audio link was tested up to the start of a call, without a SIM. Calls, SMS
-and mobile data with a SIM haven't been tried yet. Nokia's BB5 secure environment works as on stock,
+ready states, and the call-audio link was tested up to the start of a call, without a SIM. With a SIM
+(2026-10-18): the PIN query, the registration and signal bars, and mobile data work; an outgoing call
+was placed, its audio not checked; SMS not tried yet. Nokia's BB5 secure environment works as on stock,
 with Nokia's driver built in and Harmattan's own `libbb5` and `validator-init`.
 
 ## The modem link
@@ -15,8 +16,11 @@ with Nokia's driver built in and Harmattan's own `libbb5` and `validator-init`.
 | GPIOs | `cmt_en` 23, `cmt_rst_rq` 88, `cmt_apeslpx` 93, the modem's reset indication on 34, the SSI wake (cawake) on 151 |
 | Harmattan's users | `csd` (calls, SMS, data), `sscd` (modem power and state), PulseAudio's `module-meego-cmtspeech`, Nokia's `stserver` and `infoserver` |
 
-`nokia_modem.pm=0` is on the kernel command line. NOLO leaves the modem powered (`cmt_en` high) and
-stock's kernel never drove its GPIOs; with `pm=1` the driver would pull them low. `hsi_char` is not
+NOLO's `gpio=` boot parameter lists the modem's lines. As stock's kernel did, 1ffbf0536 exports them
+under their names and drives `cmt_en` and `cmt_rst_rq` active, which starts a modem that sscd switched
+off at shutdown; udev links them as `/dev/cmt/<name>`, and sscd powers the modem on and off through
+them. `nokia_modem.pm=0` is on the kernel command line: with `pm=1` the driver would take the lines and
+pull them low. `hsi_char` is not
 built, because only Nokia's modem flasher used it ([Removed](./removed)).
 
 ## What Harmattan needs from the kernel
@@ -29,6 +33,9 @@ built, because only Nokia's modem flasher used it ([Removed](./removed)).
 | ec906f020 `HSI: omap_ssi_port: don't write the divisor of a suspended port` | a mainline bug: every L3 frequency change wrote the port's divisor with its clocks off (an L3 "In-band Error") |
 | aa4a23614, e89447038 `HSI: omap_ssi_port: acknowledge a spurious error interrupt`, `report the port's state with a spurious error` | the unacknowledged interrupt looped in the port's thread until the phone panicked |
 | 58fde0d17 `HSI: omap_ssi_port: acknowledge the status a context loss leaves` | after every wake from CORE OFF the port delivered one garbage word ("ssi-protocol: command 0x... not supported"), from a stale status register |
+| f6b65db08 `ARM: OMAP2+: N9: power on a modem that doesn't answer at boot, as sscd does` | a modem left off with `cmt_en` still high (a root `reboot` that cut sscd's power-off short, the first boot after a flash) doesn't start when the line is driven active; sscd found "SSI connection DOWN" and powered it on only at ~25 s, after csd had started, and csd then showed no operator. If `phonet0` is up without carrier 2 s after udev's `netif-up` set it up (~8 s), the kernel does sscd's own power-on: `cmt_rst_rq` and `cmt_en` low, 20 ms, both high. The modem's reset indication (GPIO 34) reads 0 while the modem runs, so it can't tell off from on |
+| f674ccef9 `phonet: send a local client's PN_COMMGR messages to the modem` | csd's plugins subscribe to the modem's indications with `PNS_SUBSCRIBED_RESOURCES_IND` to `PN_COMMGR` (0x10). sscd binds `PN_COMMGR` at start-up on a stream it never reads, and resource routing delivered every subscription sent after sscd started to it: no signal bars after the modem registered, and mobile data stalled after the context was accepted (no `GPDS_CONTEXT_ACTIVATE_IND`). Resource routing stays for every other resource (csd reaches sscd's `PN_MTC` through it) |
+| 5fc130516 `phonet: pep: pull the header before parsing a connect request's sub-blocks` | a mainline bug: `pep_sock_accept()` parsed the pipe header as the connect request's sub-blocks and dropped it without an answer, so the data pipe of mobile data timed out ("Data pipe timed out", pipe error 0a:08) |
 
 **Local Phonet resources.** At boot, Nokia's self-test server (`stserver -z`) and `infoserver` bind some
 Phonet resources on the SoC side (self-test 0x59 and 0x35; security, phone info and others), and Phonet
@@ -89,13 +96,23 @@ ls -l /dev/cmt_speech                        # root pulse, 0660
 ls -l /proc/$(pidof pulseaudio)/fd | grep cmt_speech
 ```
 
-In syslog, csd says "Phonet up" and sscd reaches `SystemReady`. **sscd writes the phone's IMEI to
-syslog**: filter it out (and IMSI, ICCID, serial numbers, phone numbers from csd) before sharing a log.
+In syslog, csd says "Phonet up" and sscd reaches `SystemReady`. **sscd writes the phone's IMEI and
+the SIM's ICCID ("ICC ID") to syslog**, and the GPRS access point's gconf key is the IMSI: filter them
+out (and serial numbers, phone numbers from csd) before sharing a log.
+
+With a SIM, the modem's radio comes on at the end of the boot (sscd's `SystemReady`, `MTC_NORMAL`), and
+the bars follow a few seconds later. During mobile data `gprs0` exists and counts packets.
+
+**No PIN dialog at boot** (not a kernel problem): on a phone whose setup wizard never completed,
+`/var/lib/cherry/state` is missing and `cherry` starts at every boot and crashes (stock too). Its early
+`CHERRYUI_DONE` ends the boot video before it signals `VIDEO_END`, so celluid never shows the PIN query
+and the device lock never starts. A state file with `999/0/0/0` (owned by `user`), which cherry-checker
+reads as a finished wizard, ends it.
 
 ## Not done
 
-- Calls, SMS and mobile data with a SIM: the speech frames through PulseAudio, the audio on each route
-  by ear, an incoming call.
+- SMS, an incoming call, and a call's speech frames through PulseAudio and its audio on each route by
+  ear.
 - A call with USB unplugged, so that the L3 frequency (and with it the SSI clock) changes during the
   call. In the SIM-less tests L3 never switched, so cf6e32591's path wasn't exercised.
 - A modem reset during a call (PulseAudio should log "modem reset detected" and reopen).

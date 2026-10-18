@@ -5,9 +5,9 @@ on a real phone; each area's page has the details and how it was tested, and the
 `UNPORTED.md` lists what was left out.
 
 ::: warning Release candidate
-The release image is in its first days of daily use. Real calls, SMS and mobile data have not been
-tried with a SIM yet, and the image has only been booted from RAM, never flashed (see
-[Install](./install)).
+The release image is in its first days of daily use, flashed on the test phone since 2026-10-18 (see
+[Install](./install)). With a SIM, the PIN query, the signal and mobile data work; SMS and a call's
+audio haven't been checked yet.
 :::
 
 ## Works
@@ -24,7 +24,7 @@ tried with a SIM yet, and the image has only been booted from RAM, never flashed
 | [FM radio](./fm) | tuning, seek, RDS, through Nokia's own WL1273 drivers |
 | [NFC](./nfc) | Nokia's PN544 driver; an Android phone detected and read (tag contents not checked yet) |
 | [TV-out](./tv-out) | composite PAL/NTSC over the AV cable, Harmattan's own clone mode |
-| [Modem](./modem) | up at the ISI level as stock (csd, sscd); the call-audio link tested without a SIM |
+| [Modem](./modem) | up at the ISI level as stock (csd, sscd); with a SIM the PIN query, registration, signal bars and mobile data; the call-audio link tested without a SIM |
 | Sensors and GPS | accelerometer, magnetometer and compass, light and proximity, GPS, the touchscreen with Nokia's configuration |
 | [Power](./power) | charging with charger-type detection, the battery as BME reads it, CPU frequency and voltage scaling with SmartReflex as Nokia's, CORE retention and OFF in standby, OFF mode armed at boot by Harmattan's `pmconfig` as stock |
 | [Secure services](./modem#bb5-the-secure-environment) | the BB5 secure environment (Nokia's driver, Harmattan's libbb5) |
@@ -33,7 +33,8 @@ tried with a SIM yet, and the image has only been booted from RAM, never flashed
 
 ## Not done or not tried yet
 
-- **Calls, SMS and mobile data with a SIM**: the modem and its call-audio link work without one.
+- **SMS, incoming calls and a call's audio** with a SIM: registration and mobile data work, an outgoing
+  call was placed.
 - **Bluetooth profiles other than OBEX** (A2DP, headsets, PAN, DUN) and a call through a Bluetooth headset.
 - **Power-off, charging while off (ACT_DEAD) and alarm power-on**: restored as stock in the kernel, not
   tried on a phone yet.

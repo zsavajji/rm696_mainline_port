@@ -21,7 +21,10 @@ recovered. This file is the procedure for when I decide to go ahead.
 
 ## Status (2026-10-17)
 
-- **The image**: `RELEASE=1 kernel/build.sh` -> `build/zImage-n9-release`. Kernel: rm696 = 23d3a1489 since 2026-10-18 (stock's idle state choice in standby, the deferrable charger poll, the I2C fix after CORE OFF)
+- **The image**: `RELEASE=1 kernel/build.sh` -> `build/zImage-n9-release`. Kernel: rm696 = f674ccef9 since 2026-10-18 evening (me: "merge with rm696, push"): the kernel powers on a modem that
+  doesn't answer at boot (f6b65db08), the Phonet pipe accept fix (5fc130516) and PN_COMMGR subscriptions sent to the
+  modem (f674ccef9), which make the PIN query, the signal and mobile data work with a SIM (`NOTES.md`, "SIM, mobile
+  data, the WLAN drops"), and the WLAN drop fixes (1fa3904b2, 356938e4c); before: 23d3a1489, 2026-10-18 (stock's idle state choice in standby, the deferrable charger poll, the I2C fix after CORE OFF)
   (me: "ok so merge everything"): the WLAN chip runs Nokia's driver with stock's firmware (5 GHz standby 18 mA,
   wlcore drew 119; `NOTES.md`, "WLAN: Nokia's driver and stock's firmware"), stock's ELP and SD-slot idle delays,
   the stock C7 (9066b7305); before: 0ffa2dc43, 2026-10-10 (v6.18.55 merged, the OFF-mode fixes of 592e0d149;
@@ -37,6 +40,9 @@ recovered. This file is the procedure for when I decide to go ahead.
   DSME holds both watchdogs, OneNAND writable as stock, MemTotal 1,002,732 kB and 256 MB swap, rootfs rw
   as NOLO mounts it, modem up (no SIM), no oops.
 - **Found on the release boots, fixed**:
+  - with a SIM: "no operator" after a root `reboot` or a flash (the modem was started only by sscd, after
+    csd), no signal bars, mobile data failing ("Data pipe timed out") or stalling -> f6b65db08, 5fc130516,
+    f674ccef9 (`NOTES.md`, "SIM, mobile data, the WLAN drops");
   - the modem didn't power on after a clean reboot ("SSI connection DOWN", `csd` spinning, "problem with
     the SIM"): NOLO's `gpio=` lines (`cmt_*`) weren't requested and exported for udev's `/dev/cmt` links
     -> 1ffbf0536, 03b14d1de;

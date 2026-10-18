@@ -54,12 +54,19 @@ if [ -e $v/poweroff-halt ]; then
 fi
 
 # The previous boot's crash records (pstore: its console's last 256 KiB, any oops or panic), kept on the
-# phone as stock kept oopses in NOLO's log partition, then cleared
+# phone as stock kept oopses in NOLO's log partition, then cleared. Every warm reset leaves the console,
+# so it's kept only after a crash: an oops or panic record, or a console without the kernel's own last
+# line of a reboot, halt or power-off (a panic, a watchdog, this init's boot watchdog never print it)
 mount -t pstore pstore /sys/fs/pstore 2>/dev/null
 if [ -n "$(ls /sys/fs/pstore)" ]; then
-	d=$v/pstore/$(date +%Y%m%d-%H%M%S)
-	mkdir -p $d && cp /sys/fs/pstore/* $d/ && rm -f /sys/fs/pstore/*
-	echo "rescue: the previous boot's pstore records in ${d#/newroot}"
+	if ls /sys/fs/pstore | grep -q '^dmesg-' || ! cat /sys/fs/pstore/console-* 2>/dev/null |
+		grep -Eq 'reboot: (Restarting system|System halted|Power down)'; then
+		d=$v/pstore/$(date +%Y%m%d-%H%M%S)
+		mkdir -p $d && cp /sys/fs/pstore/* $d/ && rm -f /sys/fs/pstore/*
+		echo "rescue: the previous boot's pstore records in ${d#/newroot}"
+	else
+		rm -f /sys/fs/pstore/*
+	fi
 fi
 
 # The USB network until usb_moded loads its own gadget (SDK mode: g_ether, the same address): a CDC

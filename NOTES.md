@@ -2412,6 +2412,50 @@ op_tx's station rides to the TX work in the rate slot mac80211 leaves to drivers
 control; Nokia's `ieee80211_{en,dis}able_dyn_ps()` (BT coexistence) became a driver flag; the MAC
 address comes from the chip's fuse (Nokia's driver registered zeros and nothing in Harmattan sets one).
 
+## SIM, mobile data, the WLAN drops (2026-10-18; rm696 f674ccef9)
+
+The first SIM in this phone (vodafone IT, with a PIN), and a dmesg from another phone's first boot
+after flashing ("no operator"). Three kernel fixes and one Harmattan state file:
+
+- **The modem started late.** The kernel's `gpio=` export (1ffbf0536) drives `cmt_en` active, which
+  starts a modem sscd switched off at shutdown. A modem left off with `cmt_en` still high didn't start:
+  after a root `reboot` with the SIM in (sscd's "Preparing to power modem down", and no "Modem shutdown
+  complete" before syslogd stopped) and on the other phone after its flash. sscd then found "SSI
+  connection DOWN" at ~21 s and powered the modem on at ~25 s, after csd. `f6b65db08`: when `phonet0`
+  is up (udev's `netif-up`, ~8 s) without carrier for 2 s, the kernel does sscd's own RAPU2 power-on
+  (`ssc_hw_start_cellmo_power_on` in sscd 1.0.3: `cmt_rst_rq` and `cmt_en` low, 20 ms, both high).
+  After a root `reboot`: "no answer from the modem on phonet0: powering it on" at 10.5 s, the link at
+  15.2 s, before csd. A DSME reboot ("Preparing for device reboot") keeps the modem running, and the
+  SIM unlocked. The modem's reset indication (GPIO 34) reads 0 with the modem running.
+- **Mobile data: "Data pipe timed out"** (pipe error 0a:08). A `phonet0` capture (AF_PACKET, the pipe
+  and GPDS resources) showed csd's `PNS_PIPE_CREATE_REQ`, the modem's `PNS_PEP_CONNECT_REQ` with two
+  sub-blocks, csd's `accept()` (kprobe), and no `PNS_PEP_CONNECT_RESP`: mainline's `pep_sock_accept()`
+  only `pskb_may_pull()`s the header, so `pep_get_sb()` read the pipe header as a sub-block and
+  `accept()` dropped the request. `5fc130516` pulls it, as `pep_connresp_rcv()` and Nokia's
+  `pep_connreq_rcv()` do.
+- **No indications.** csd's plugins subscribe with `PNS_SUBSCRIBED_RESOURCES_IND` to `PN_COMMGR` at
+  device 0, object 0 (libisi's `isi_client_subscribe_indications()`), and `pn_skb_send()`'s resource
+  routing delivered them to sscd, which binds `PN_COMMGR` at start-up on its second ISI stream and
+  never reads it (kprobes on `pn_find_sock_by_res()`: csd's resource-0x10 sends returned sscd's
+  socket; csd sets no `SO_BINDTODEVICE`, sscd does for its own sockets). Every subscription sent after
+  sscd started was lost: CSNet stayed PowerOff/Offline after the modem registered, and after a csd
+  restart the modem sent no `GPDS_CONTEXT_ACTIVATE_IND`, so mobile data stalled after the context was
+  accepted. `f674ccef9` sends a local client's `PN_COMMGR` messages to the modem. How stock avoided
+  it is not known: Nokia's routing and resource binding are the same.
+- **No PIN dialog.** The setup wizard had never completed on this phone: without `/var/lib/cherry/state`
+  cherry-checker starts `cherry`, which crashes at every boot (stock too); its `CHERRYUI_DONE` made
+  `DESKTOP_VISIBLE` stop MProgressIndicator before it wrote `VIDEO_END`, so `start-celluid` never
+  launched celluid's PIN query, and the device lock never started (`DEVICE_LOCK_DONE`, the reason for
+  my `networks-watchdog` package). A state file `999/0/0/0` (cherry-checker: app state 999 or 75 is a
+  finished wizard) fixed it.
+
+With the three (RAM boot after a root `reboot`): the PIN dialog by itself, the bars after the PIN
+without a csd restart, mobile data on `mobile.vodafone.it` (me: "ok mobile network works"). Merged
+with them: the WLAN drop fixes 1fa3904b2 (nl80211's reason code only when it came from the AP, as
+2.6.32: wlancond took a reason without the AP flag for a local choice and ignored the drop) and
+356938e4c (wl1271 probes the AP on a beacon loss instead of disconnecting at once). Open: one boot
+froze at ~8 s right after `pvrsrvkm` loaded, with eMMC writes stuck; the boot watchdog reset it.
+
 ## Standby: the standby clock, the charger poll, stock's idle choice (2026-10-18; rm696 23d3a1489)
 
 The 2.5 h step of ~9 mA in the run below came with every SoC counter flat and ended when I unlocked

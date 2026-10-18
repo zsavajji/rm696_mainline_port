@@ -54,6 +54,9 @@ Fixed in the tree, each in its own commit (`git log --grep` finds them by subjec
   the status a context loss leaves`: L3 errors and garbage words on the modem link.
 - `netlink: refuse a dump chunk only when the receive queue is already full`: Harmattan's modem daemons
   spinning after a USB replug.
+- `phonet: pep: pull the header before parsing a connect request's sub-blocks`: `accept()` dropped a pipe
+  connect request that carried sub-blocks, so mobile data's pipe never came up
+  ([Modem](./modem#what-harmattan-needs-from-the-kernel)).
 - `wifi: mac80211: ignore a -128 dBm country element power limit`: some access points capped the
   transmit power at 0 dBm.
 - `i2c: omap: don't touch a suspended controller from the interrupt thread`.

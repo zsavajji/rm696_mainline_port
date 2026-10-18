@@ -3,7 +3,8 @@
 # MyDocs/.n9-logs/powerlog.txt, synced each minute so a reset or a flat battery loses at most a minute
 # (cumulative counters; diff two lines for a period), the top CPU users every 10 min.
 # Fields: up(s) core=ON/RET/OFF seconds core#=RET/OFF entries mpuoff# C5/C6/C7 picks, IRQ totals
-# wkup/clk/mmc2/wl/i2c1, wlan=state/rx/tx packets/MHz, wlchip=awake/asleep s (wlcore only), bl=backlight usb=online vbat=mV,
+# wkup/clk/mmc2/wl/i2c1, wlan=state/rx/tx packets/MHz, wlchip=awake/asleep s (wlcore only), bl=backlight/panel
+# low-power mode (1: the standby clock, which the panel draws itself, ~9 mA), usb=online vbat=mV,
 # freq=s at 600/800/1000 MHz, bme=% / mAh left / battery current mA (bmestat). Start (rescue ssh, root):
 #   setsid sh /newroot/home/user/MyDocs/n9-tests/powerlog.sh </dev/null >/dev/null 2>&1 &
 # Stop: touch /tmp/powerlog.stop
@@ -24,7 +25,7 @@ while [ ! -e /tmp/powerlog.stop ]; do
 		"irq=$(irq pm_wkup)/$(irq clockevent)/$(irq mmc2)/$(irq wl12xx)$(irq wl1271)/$(irq 48070000.i2c)" \
 		"wlan=$(cat $n/operstate 2>/dev/null)/$(cat $n/statistics/rx_packets 2>/dev/null)/$(cat $n/statistics/tx_packets 2>/dev/null)/$(chroot /newroot /usr/sbin/iw dev wlan0 link 2>/dev/null | awk '/freq/ {print $2}')" \
 		"wlchip=$([ -e $w/runtime_active_time ] && echo $(($(cat $w/runtime_active_time) / 1000))/$(($(cat $w/runtime_suspended_time) / 1000)))" \
-		"bl=$(cat /sys/class/backlight/*/brightness | head -1) usb=$(cat /sys/class/power_supply/usb/online 2>/dev/null)" \
+		"bl=$(cat /sys/class/backlight/*/brightness | head -1)/$(cat /sys/bus/platform/devices/4804fc00.encoder/*panel*/lpm 2>/dev/null) usb=$(cat /sys/class/power_supply/usb/online 2>/dev/null)" \
 		"vbat=$(cat /sys/bus/iio/devices/iio:device0/in_voltage12_input 2>/dev/null)" \
 		"bme=$(chroot /newroot /usr/bin/bmestat 2>/dev/null | awk -F: '/pct. level|cur. capacity|battery current/ {gsub(/ /, "", $2); printf "%s/", $2}')" \
 		"freq=$(awk '$1 >= 600000 && $1 <= 1000000 {printf "%d/", $2 / 100}' $c/cpufreq/stats/time_in_state)" >> $L

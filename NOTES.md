@@ -2412,6 +2412,24 @@ op_tx's station rides to the TX work in the rate slot mac80211 leaves to drivers
 control; Nokia's `ieee80211_{en,dis}able_dyn_ps()` (BT coexistence) became a driver flag; the MAC
 address comes from the chip's fuse (Nokia's driver registered zeros and nothing in Harmattan sets one).
 
+## Standby: the standby clock, the charger poll, stock's idle choice (2026-10-18; rm696 23d3a1489)
+
+The 2.5 h step of ~9 mA in the run below came with every SoC counter flat and ended when I unlocked
+the phone at 23:30: it had been showing the standby clock, which the panel draws by itself in its
+low-power mode (`lpm=1` in its sysfs; now logged). Stock's two levels on the same access point are the
+same two states, so the gap to stock is ~7 mA in either.
+
+What wakes the CPU in standby (wake-up attribution: the first timer to fire within 1 ms of an idle
+exit): the tick as the timer wheel's next deadline (stock's `est_timer` among them, 2/s), userspace's
+own sleeps, and our TWL5031 charger driver's 2 s wall-charger poll; mainline's periodic work here
+(TCP orphans, memcg stats, managed neighbours) is deferrable already. `b47966392` makes the poll
+deferrable. `23d3a1489` takes chip-idle (`c90df9f78`, Nokia's `cpuidle_chip_is_idle()`): its overnight
+A/B on 2026-10-15/16 (OFF 40-46% vs 17-18%, the same current) ran while every OFF exit still cost the
+14 ms I2C spins below, which ate what the extra OFF saves. The night after (11.1 h unplugged, 5 GHz
+channel 100, the standby clock on all night, `build/powerlog-23d3a1489-night.txt`): 15.5 mA (median
+11), CORE ON 15% RET 18% OFF 64%, 35 wake-ups a second; the same state before it drew 23-24 mA with
+OFF 41%, and stock's draws 11-16.
+
 ## I2C after CORE OFF (2026-10-17 evening; rm696 9e69d67db)
 
 BME (`bme_RX-71`, `/dev/i2c-1` and `-2`) and DSME (the watchdog kicks through the TWL) spent 1-2.3% of

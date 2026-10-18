@@ -38,16 +38,23 @@ test session armed it: the release image ran 5 hours with CORE never OFF and MPU
 | C4 | OFF | ON | 2.3 ms | 42.6 ms | 3.3 / 4 ms |
 | C5 | retention | retention | 5.6 ms | 56.1 ms | 10 / 12 ms |
 | C6 | OFF | retention | 7.7 ms | 77.6 ms | 11.5 / 15 ms |
-| C7 | OFF | OFF | 22.3 ms | 158.1 ms | 40 / 300 ms |
+| C7 | OFF | OFF | 22.3 ms | 99.1 ms | 40 / 300 ms |
 
 The N9 column is Nokia's own measurement (`board-rm696.c`, sleep plus wake latency), applied for
-`nokia,omap3-n9` by `bbd32bffc`; C7 takes stock's C8 numbers, OFF with the secure RAM save, which this
-kernel's C7 always does. With mainline's table the display's 6 ms latency limit refused C5, and the
+`nokia,omap3-n9` by `bbd32bffc`; C7 is stock's C7 (`9066b7305`; stock's C8, 158 ms, adds what this
+kernel's C7 does anyway, OFF with the secure RAM save, and with it most standby idles stayed in
+retention). With mainline's table the display's 6 ms latency limit refused C5, and the
 governor took MPU retention for idles of 300 us, where Nokia asked for 29 ms.
 
 Two latency limits apply, both as stock: 6 ms while the display is on and not in its low-power standby
 mode (the panel's `idle_latency_us` in sysfs), and 6 ms for 1 s after any key or touch (the input
 boost, below). So C5 runs with the screen on; C6 and C7 only with the display off.
+
+In standby the state is picked as stock's cpuidle did (`23d3a1489`, Nokia's `cpuidle_chip_is_idle()`):
+with the tick stopped, no functional clock running in CORE or PER (the UARTs aside) and CORE OFF
+allowed, the deepest state that the next timer and the latency limit allow, instead of the menu
+governor's guess, which took retention or less for most idles long enough for OFF. Switch:
+`/sys/module/cpuidle34xx/parameters/chip_idle_deepest` (default Y).
 
 Beyond the table, `omap_sram_idle()` keeps CORE ON for an idle when a CORE functional clock runs, when
 L3 is held high and can't be lowered for this idle (below), or while SmartReflex calibrates VDD2. With
@@ -129,8 +136,12 @@ With the screen on and still and WLAN associated, CORE now retains as on stock: 
 Battery drain: with CORE stuck ON overnight (the charger bug below) the drain was about 25-70 mA.
 Standby on a 5 GHz access point, WLAN associated, screen off: 18 mA with Nokia's WLAN driver
 ([WLAN power save](#wlan-power-save)), CORE OFF 25% of the time; with the I2C fix below, CORE OFF
-41% and 13-15 mA, with phases of about 9 mA more that nothing on the SoC side explains (stock shows
-the same kind of phases: 6-8 and 11-16 mA on the same access point).
+41% and 13-15 mA. The standby clock adds about 9 mA while it shows: the panel draws it by itself in
+its low-power mode (`lpm` in the panel's sysfs, in `tests/powerlog.sh`), with nothing on the SoC side
+changing; stock's 6-8 and 11-16 mA phases on the same access point are the same two states.
+The TWL5031 charger driver's wall-charger poll no longer wakes the CPU (`b47966392`). With stock's
+idle choice (`23d3a1489`, [Idle states](#idle-states)) a night of 11 hours with the standby clock on:
+15.5 mA (median 11), CORE OFF 64% (23-24 mA and 41% before it, stock 11-16 mA in that state).
 
 ### I2C after CORE OFF
 

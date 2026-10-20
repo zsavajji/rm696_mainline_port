@@ -215,6 +215,13 @@ prelinked addresses, as on stock.
 - **Storage.** The eMMC runs 4-bit at 48 MHz as on stock (its upper data lines carry the WLAN's SDIO).
   Cold-reading Harmattan's 1658 libraries takes 14.1-14.6 s with any I/O scheduler, 13.9 s with 512 KiB
   readahead: the eMMC's latency is the limit.
+- **Screen rotation polling.** While the screen is on, sensord reads the accelerometer every 200 ms
+  for the screen rotation (`orientation_poll_interval` in stock's
+  `/etc/sensorfw/sensord.conf.d/90-sensord-default.conf`). I run it at 1 Hz with a file that loads
+  first, `/etc/sensorfw/sensord.conf.d/80-rotation-rate.conf`: `orientation_poll_interval = 1000`
+  (I2C3 interrupts 43 -> 3 a second with the block read; a rotation is noticed within 1 s). Apps that
+  ask sensord for a rate keep theirs; apps that set none (QtMobility sends 0) follow the rotation's.
+  Delete the file to undo.
 - **Start-up** shows no kernel hot spot: Harmattan's own start-up spread over ~15 processes, page
   faults, exec and path lookups. App launch time end to end against stock has not been measured.
 

@@ -455,7 +455,11 @@ didn't. It now follows stock:
   the CPU runs at its maximum and stays out of deep idle (≤ 6 ms exit latency) for 1 s. It skips ABS
   devices that aren't touch devices: the accelerometer has click buttons too and streams events while
   Harmattan's sensord polls it, which kept the boost (and the CPU at its maximum) on for good in the
-  first test.
+  first test. Since rm696 7d90e3ba7 (2026-10-20) also stock's rotation boost: sensord writes
+  `/sys/power/pm_optimizer_rotation` at each rotation (it logged "Failed to open" before), and the CPU
+  runs at its maximum for 1 s. The same day: the accelerometer's axes in one I2C block transfer
+  (3a43495bb, `st,use-block-read`) and sensord's rotation polling at 1 Hz instead of 5
+  (`sensord.conf.d/80-rotation-rate.conf`, [Performance](docs/performance.md)).
 - **Scheduling**: full preemption and HZ 250 (stock: `PREEMPT`, HZ 128); HZ 128 too since 2026-10-05
   (rm696 281cc3d23, "Context switch cost").
 - **Memory**:

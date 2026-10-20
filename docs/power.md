@@ -194,7 +194,9 @@ table. Not checked: the cold, a long soak, an N950.
   gain ([Performance](./performance#the-cpu-governor)).
 - **Input boost** (`86ae9abe1`), as stock's PM optimizer: after a key or touch the CPU runs at its
   maximum with a 6 ms idle latency limit for 1 s (`/sys/module/cpufreq_input_boost/parameters/`
-  `boost_ms`, `latency_us`). Devices without keys (the accelerometer) don't trigger it.
+  `boost_ms`, `latency_us`). Devices without keys (the accelerometer) don't trigger it. A screen
+  rotation gets the same frequency boost for 1 s, without the idle limit, as stock (`7d90e3ba7`):
+  sensord writes to `/sys/power/pm_optimizer_rotation` when the screen's top edge changes.
 - **GPU floor**: while the SGX is busy the CPU stays at or above 800 MHz
   (`/sys/module/pvrsrvkm/parameters/cpu_min_khz`, 0 = off). Stock had none.
 - **Overclock, off by default**: boost OPPs at 1.1 GHz (1.3875 V) and 1.2 GHz (1.4 V), enabled with
@@ -321,6 +323,9 @@ drew 119 mA on a 5 GHz channel where stock draws 9.7 mA (same channel, same spot
 - The DAC33's low-power FIFO mode runs for long-buffer playback ([Audio](./audio)).
 - McBSP wakeups no longer wake the CPU (`3a5439de6`): mainline grouped McBSP2/3/4 with the MPU.
 - The SGX powers down 1 ms after it idles, as Nokia's driver.
+- The accelerometer is polled only while the screen is on (sensord, for the screen rotation); each
+  sample is one I2C block transfer, as Nokia's driver (`3a43495bb`; mainline read the three axes in
+  three transfers). Its rate is a sensord setting ([Performance](./performance#outside-the-kernel)).
 - The R&D sleep indicator lights are off at boot, as stock (`0342d26bd`).
 
 ## CAL and OneNAND

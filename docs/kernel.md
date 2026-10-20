@@ -44,6 +44,9 @@ Fixed in the tree, each in its own commit (`git log --grep` finds them by subjec
   Nokia's driver instead, see [Power](./power#wlan-power-save)).
 - `usb: musb: don't restore a context the controller kept`: the USB network dead after a replug.
 - `usb: musb: gadget: don't flush the RX FIFO when queueing a request`: mass-storage writes stalled.
+- `usb: musb: gadget: no callbacks into a gadget driver being unbound`: a panic at a cable unplug, when
+  usb_moded unloaded the gadget while a control request was coming in (musb didn't implement the
+  core's `udc_async_callbacks`).
 - `ARM: OMAP3: hwmod: don't wait for the I2C's RESETDONE in the hwmod`: after every CORE OFF the
   first access to each I2C bus spun 14 ms with interrupts off, waiting for a bit the I2C sets only
   once enabled ([Power](./power#i2c-after-core-off)).
